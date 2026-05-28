@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN useradd -r -u 10001 appuser
+COPY bot/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY bot /app/bot
+RUN chown -R appuser:appuser /app
+USER appuser
+WORKDIR /app/bot
+CMD ["python", "main.py"]

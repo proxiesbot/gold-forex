@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+backend/.venv/
+bot/.venv/
+data/app.db
+data/runs/*.json
+data/strategies/*.json
+data_test/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/

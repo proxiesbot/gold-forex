@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+.git/
+.gitignore
+backend/tests/__pycache__/
+bot/__pycache__/
+data_test/
+data/app.db
+data/runs/*.json
+data/strategies/*.json
+*.zip
