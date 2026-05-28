@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import settings, setup_logging
 from app.engine.scanner import ResearchScanner
+import pandas as pd
 from app.errors import AppError, InvalidRequestError, MarketDataUnavailableError, RunNotFoundError, StrategyNotFoundError, TemplateNotFoundError
 from app.models import ChartContextRequest, ResearchRunRequest, ResearchRunResponse, StrategyCorrectRequest, StrategyInterpretRequest, StrategyInterpretResponse, StrategySaveRequest, StrategySaveResponse, StrategySpec, StrategyTemplateExampleSaveRequest, StrategyTemplateSaveRequest, StrategyTemplateScanRequest
 from app.repositories.database import db
@@ -317,6 +318,185 @@ async def run_local_backtest(payload: ResearchRunRequest, _auth: None = Depends(
     summary = run_store.save_run(payload, response)
     response.run_id = summary.id
     return response
+
+
+# ─── QM & Custom Patterns API ─────────────────────────────────────────────
+
+
+@app.post("/api/patterns/qm/scan", response_model=ResearchRunResponse)
+async def scan_qm_levels(payload: ResearchRunRequest, _auth: None = Depends(require_api_key)):
+    """
+    Phase 1+2: Detect all QM levels on HTF, then analyze LTF reactions.
+
+    Usage:
+    - Set strategy_key="qm" in payload.strategy
+    - Set primary_timeframe (e.g. "30m") for QM detection
+    - Set execution_timeframe (e.g. "5m") for LTF reaction analysis
+    - direction: "bullish", "bearish", or "either"
+    """
+    payload.strategy.strategy_key = "qm"
+    response = scanner.run(payload)
+    summary = run_store.save_run(payload, response)
+    response.run_id = summary.id
+    return response
+
+
+@app.post("/api/patterns/qm/levels")
+async def detect_qm_levels_only(payload: dict, _auth: None = Depends(require_api_key)):
+    """
+    Phase 1 only: Find all QM levels (without LTF analysis).
+    Returns structured levels with freshness status.
+
+    Body: { "symbol": "XAUUSD", "timeframe": "30m", "direction": "either", "max_levels": 50 }
+    """
+    from app.engine.pattern_detector import PatternDetector
+    from app.services.local_data_provider import LocalCSVProvider
+
+    symbol = payload.get("symbol", "XAUUSD")
+    timeframe = payload.get("timeframe", "30m")
+    direction = payload.get("direction", "either")
+    max_levels = int(payload.get("max_levels", 50))
+    swing_lookback = int(payload.get("swing_lookback", 5))
+
+    try:
+        df = scanner.market.fetch(symbol, timeframe, periods=2000)
+    except MarketDataError as exc:
+        raise MarketDataUnavailableError(details={"reason": str(exc)}) from exc
+
+    # Prepare data
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    df = df.sort_values("timestamp").reset_index(drop=True)
+
+    detector = PatternDetector(swing_lookback=swing_lookback)
+    levels = detector.detect_qm_levels(df, direction=direction, max_levels=max_levels)
+
+    from dataclasses import asdict
+    levels_data = []
+    for level in levels:
+        d = asdict(level)
+        d.pop("swing_points", None)  # Can be large, remove for summary
+        levels_data.append(d)
+
+    fresh = [l for l in levels if l.freshness == "fresh"]
+    tested = [l for l in levels if l.freshness == "tested"]
+
+    return {
+        "ok": True,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "direction": direction,
+        "total_levels": len(levels),
+        "fresh": len(fresh),
+        "tested": len(tested),
+        "broken": len(levels) - len(fresh) - len(tested),
+        "levels": levels_data,
+        "summary": f"تم اكتشاف {len(levels)} مستوى QM على فريم {timeframe} ({len(fresh)} طازج، {len(tested)} مُختبر)",
+    }
+
+
+@app.post("/api/patterns/qm/phase2")
+async def qm_phase2_ltf(payload: dict, _auth: None = Depends(require_api_key)):
+    """
+    Phase 2: Given a specific QM level, analyze what happened on LTF.
+
+    Body: { "symbol": "XAUUSD", "htf": "30m", "ltf": "5m", "zone_low": 3300.5, "zone_high": 3305.2, "direction": "bullish", "level_time": "2026-05-01T10:00:00" }
+    """
+    from app.engine.pattern_detector import PatternDetector, QMLevel
+
+    symbol = payload.get("symbol", "XAUUSD")
+    ltf_timeframe = payload.get("ltf", "5m")
+    direction = payload.get("direction", "bullish")
+    zone_low = float(payload.get("zone_low", 0))
+    zone_high = float(payload.get("zone_high", 0))
+    level_time = payload.get("level_time", "")
+    outcome_window = int(payload.get("outcome_window", 30))
+
+    if not zone_low or not zone_high:
+        raise InvalidRequestError("zone_low and zone_high are required")
+
+    try:
+        ltf_df = scanner.market.fetch(symbol, ltf_timeframe, periods=5000)
+    except MarketDataError as exc:
+        raise MarketDataUnavailableError(details={"reason": str(exc)}) from exc
+
+    ltf_df["timestamp"] = pd.to_datetime(ltf_df["timestamp"], utc=True)
+
+    # Create a QMLevel object for the specified zone
+    level = QMLevel(
+        level_id="manual",
+        direction=direction,
+        zone_low=zone_low,
+        zone_high=zone_high,
+        zone_mid=round((zone_low + zone_high) / 2, 3),
+        timestamp=level_time or ltf_df["timestamp"].min().isoformat(),
+        swing_points=[],
+        freshness="fresh",
+        touches_after=0,
+        first_touch_time=None,
+        session_label="",
+        quality_score=70.0,
+        explanation=["Manual level provided by user"],
+    )
+
+    detector = PatternDetector()
+    reactions = detector.analyze_ltf_reactions([level], ltf_df, outcome_window)
+
+    from dataclasses import asdict
+    return {
+        "ok": True,
+        "zone": {"low": zone_low, "high": zone_high, "mid": level.zone_mid},
+        "ltf_timeframe": ltf_timeframe,
+        "reactions_found": len(reactions),
+        "reactions": [asdict(r) for r in reactions],
+        "summary": f"تحليل LTF ({ltf_timeframe}): {'وصل السعر للزون وتفاعل' if reactions else 'السعر لم يصل للزون بعد'}",
+    }
+
+
+@app.post("/api/patterns/custom/define")
+async def define_custom_pattern(payload: dict, _auth: None = Depends(require_api_key)):
+    """
+    Define a new custom pattern from natural language description.
+
+    Body: { "name": "QM", "description": "السعر يعمل قاع جديد، بعدين قمة جديدة، بعدين قاع أعلى من الأول" }
+    """
+    from app.engine.custom_patterns import CustomPatternStore, parse_pattern_description
+    from dataclasses import asdict
+
+    description = payload.get("description", "")
+    name = payload.get("name", "")
+
+    if not description:
+        raise InvalidRequestError("description is required - describe the pattern in Arabic or English")
+
+    pattern = parse_pattern_description(description, name)
+    store = CustomPatternStore()
+    saved = store.save(pattern)
+
+    return {
+        "ok": True,
+        "pattern_id": saved.pattern_id,
+        "name": saved.name,
+        "direction": saved.direction,
+        "rules": [asdict(r) for r in saved.rules],
+        "message": f"تم حفظ النمط '{saved.name}' بنجاح. يمكنك الآن استخدامه في البحث.",
+    }
+
+
+@app.get("/api/patterns/custom/list")
+async def list_custom_patterns():
+    """List all saved custom patterns."""
+    from app.engine.custom_patterns import CustomPatternStore
+    store = CustomPatternStore()
+    return {"ok": True, "patterns": store.list_all()}
+
+
+@app.delete("/api/patterns/custom/{pattern_id}")
+async def delete_custom_pattern(pattern_id: str, _auth: None = Depends(require_api_key)):
+    """Delete a custom pattern."""
+    from app.engine.custom_patterns import CustomPatternStore
+    store = CustomPatternStore()
+    deleted = store.delete(pattern_id)
+    return {"ok": deleted, "message": "تم الحذف" if deleted else "النمط غير موجود"}
 
 
 @app.post("/api/presets/optimize")

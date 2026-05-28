@@ -116,6 +116,16 @@ STRATEGIES: dict[str, StrategyDefinition] = {
         default_sequence=(),
         default_direction="bullish",
     ),
+    "qm": StrategyDefinition(
+        key="qm",
+        school="sr",
+        label="QM (Quasimodo)",
+        description="Detect Quasimodo (QM) levels: HL after HH (bullish) or LH after LL (bearish). Two-phase: find levels, then analyze LTF reaction.",
+        aliases=("qm", "quasimodo", "كيو ام", "كوازيمودو", "qm level", "qm levels", "حددلي qm", "مستويات qm", "quasimodo pattern"),
+        default_sequence=(),
+        default_direction="either",
+        tags=("snr", "qm", "structural"),
+    ),
     "snr_fresh_reaction_fvg_poi": StrategyDefinition(
         key="snr_fresh_reaction_fvg_poi",
         school="hybrid",

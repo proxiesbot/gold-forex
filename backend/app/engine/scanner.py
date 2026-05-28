@@ -71,6 +71,9 @@ class ResearchScanner:
         htf = self._prepare(htf, request.source_lookback)
         ltf = self._prepare(ltf, request.mss_lookback)
 
+        if strategy.strategy_key == "qm":
+            return self._run_qm_scan(strategy, htf, ltf, request, htf_report, ltf_report)
+
         if strategy.strategy_key == "snr_fresh_reaction_fvg_poi":
             results, diagnostics = self._scan_snr_reaction_fvg_poi(strategy, htf, ltf, request)
             results.sort(key=lambda item: (item.quality_score, item.outcome_move_points, -item.adverse_move_points), reverse=True)
@@ -165,6 +168,133 @@ class ResearchScanner:
             warnings=warnings,
         )
 
+
+    def _run_qm_scan(self, strategy, htf, ltf, request, htf_report, ltf_report) -> ResearchRunResponse:
+        """Run QM (Quasimodo) pattern detection - Phase 1 + Phase 2."""
+        from app.engine.pattern_detector import PatternDetector
+
+        detector = PatternDetector(
+            swing_lookback=max(3, request.source_lookback // 4),
+            zone_buffer_pct=0.001,
+        )
+        result = detector.full_scan(
+            htf_df=htf,
+            ltf_df=ltf,
+            direction=strategy.direction,
+            max_levels=request.max_setups * 3,
+            outcome_window=request.outcome_window_bars,
+        )
+
+        # Convert QM levels + reactions into SetupResult format
+        setups: list[SetupResult] = []
+        level_map = {l.level_id: l for l in result.levels}
+        reaction_map = {r.level_id: r for r in result.ltf_reactions}
+
+        for level in result.levels:
+            reaction = reaction_map.get(level.level_id)
+            outcome_label = "untested"
+            move = 0.0
+            adverse = 0.0
+            entry_price = None
+            stop_loss = None
+            take_profit = None
+            risk_points = None
+            reward_points = None
+            rr_ratio = None
+            execution_model = None
+            execution_notes = []
+            ltf_retest_time = None
+
+            if reaction:
+                outcome_label = reaction.outcome
+                move = reaction.move_after
+                adverse = reaction.adverse_after
+                entry_price = reaction.entry_price
+                stop_loss = reaction.stop_loss
+                take_profit = reaction.take_profit
+                risk_points = reaction.risk_points
+                reward_points = reaction.reward_points
+                rr_ratio = reaction.rr_ratio
+                ltf_retest_time = reaction.reaction_time
+                execution_model = reaction.ltf_pattern
+                execution_notes = reaction.explanation
+
+            quality_label = "A" if level.quality_score >= 82 else "B" if level.quality_score >= 68 else "C" if level.quality_score >= 52 else "D"
+
+            tags = ["qm", level.direction, level.freshness, level.session_label.lower()]
+            if reaction:
+                tags.append(reaction.ltf_pattern)
+
+            setups.append(SetupResult(
+                setup_id=level.level_id,
+                htf_time=level.timestamp,
+                source_type="qm",
+                source_direction=level.direction,
+                session_label=level.session_label,
+                zone_low=level.zone_low,
+                zone_high=level.zone_high,
+                entry_reference_price=level.zone_mid,
+                entry_price=entry_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                risk_points=risk_points,
+                reward_points=reward_points,
+                rr_ratio=rr_ratio,
+                execution_model=execution_model,
+                execution_notes=execution_notes,
+                outcome_label=outcome_label,
+                outcome_move_points=move,
+                adverse_move_points=adverse,
+                matched_steps_count=3 if reaction else 1,
+                quality_score=level.quality_score,
+                quality_label=quality_label,
+                ltf_retest_time=ltf_retest_time,
+                confirmation_chain=[f"qm_formed@{level.timestamp}"] + ([f"ltf_reaction@{reaction.reaction_time}"] if reaction else []),
+                tags=tags,
+                chart_focus={
+                    "zone_low": level.zone_low,
+                    "zone_high": level.zone_high,
+                    "zone_mid": level.zone_mid,
+                    "swing_points": level.swing_points,
+                    "freshness": level.freshness,
+                    "touches": level.touches_after,
+                },
+                explanation=level.explanation + (reaction.explanation if reaction else [f"الحالة: {level.freshness} - لم يصل السعر لهذا المستوى بعد" if level.freshness == "fresh" else f"الحالة: {level.freshness}"]),
+            ))
+
+        setups.sort(key=lambda s: (s.quality_score, s.outcome_move_points), reverse=True)
+
+        # Build stats
+        stats = {
+            **result.stats,
+            "labels": {"win": result.stats.get("wins", 0), "loss": result.stats.get("losses", 0), "untested": result.stats.get("fresh", 0)},
+            "quality_buckets": {},
+        }
+        for s in setups:
+            stats["quality_buckets"][s.quality_label] = stats["quality_buckets"].get(s.quality_label, 0) + 1
+
+        scope = self._build_scope(strategy, htf, ltf)
+        diagnostics = {
+            "scan_type": "qm_pattern",
+            "phases": "phase1_detect + phase2_ltf_reaction",
+            "total_swing_points_analyzed": len(htf),
+            "market_data": {"htf": htf_report, "ltf": ltf_report},
+        }
+
+        return ResearchRunResponse(
+            strategy_summary=f"{strategy.market_label}: {result.total_levels_found} QM levels ({result.fresh_levels} fresh, {result.tested_levels} tested, {result.broken_levels} broken)",
+            human_summary=result.summary,
+            supported=True,
+            total_candidates=result.total_levels_found,
+            total_qualified=len(setups),
+            setups=setups[:request.max_setups],
+            executed_plan=["qm_detect", "freshness_check", "ltf_reaction_analysis"],
+            diagnostics=diagnostics,
+            stats=stats,
+            search_scope=scope,
+            highlights=result.highlights,
+            warnings=["QM levels on small timeframes may have more noise." if strategy.primary_timeframe in {"5m", "1m"} else ""],
+        )
 
     def _apply_request_scope(self, constraints: dict, request: ResearchRunRequest) -> dict:
         merged = dict(constraints or {})
