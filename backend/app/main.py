@@ -284,6 +284,41 @@ async def chart_context(payload: ChartContextRequest, _auth: None = Depends(requ
     return {"items": items}
 
 
+@app.get("/api/local-data/status")
+async def local_data_status():
+    """Show available local historical data files for offline backtesting."""
+    from app.services.local_data_provider import LocalCSVProvider
+    provider = LocalCSVProvider()
+    datasets = provider.available_datasets()
+    return {
+        "ok": True,
+        "enabled": provider.is_enabled(),
+        "data_dir": str(provider._data_dir),
+        "datasets": datasets,
+        "note": "Local CSV data is used automatically as first priority when available.",
+    }
+
+
+@app.post("/api/backtest/local", response_model=ResearchRunResponse)
+async def run_local_backtest(payload: ResearchRunRequest, _auth: None = Depends(require_api_key)):
+    """Run backtest using local historical data only (no API keys needed)."""
+    from app.services.local_data_provider import LocalCSVProvider
+    provider = LocalCSVProvider()
+    if not provider.is_enabled():
+        raise MarketDataUnavailableError(details={"reason": "No local historical data found. Place CSV files in data/historical/"})
+    symbol = payload.strategy.symbol or settings.app_default_symbol
+    htf = payload.strategy.primary_timeframe
+    ltf = payload.strategy.execution_timeframe
+    if not provider.supports(symbol, htf):
+        raise MarketDataUnavailableError(details={"reason": f"No local data for {symbol} {htf}. Available: {[d['timeframe'] for d in provider.available_datasets()]}"})
+    if not provider.supports(symbol, ltf):
+        raise MarketDataUnavailableError(details={"reason": f"No local data for {symbol} {ltf}. Available: {[d['timeframe'] for d in provider.available_datasets()]}"})
+    response = scanner.run(payload)
+    summary = run_store.save_run(payload, response)
+    response.run_id = summary.id
+    return response
+
+
 @app.post("/api/presets/optimize")
 async def optimize_preset(payload: dict, _auth: None = Depends(require_api_key)):
     strategy_payload = payload.get("strategy")

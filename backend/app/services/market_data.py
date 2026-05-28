@@ -283,14 +283,20 @@ class MarketDataService:
         self.last_fetch_report = MarketDataFetchReport(symbol="", timeframe="", periods=0)
 
     def _build_providers(self) -> list[BaseMarketDataProvider]:
+        from app.services.local_data_provider import LocalCSVProvider
+
         available: dict[str, BaseMarketDataProvider] = {
+            "local_csv": LocalCSVProvider(),
             "twelvedata": TwelveDataProvider(settings.twelvedata_api_key),
             "alphavantage": AlphaVantageProvider(settings.alphavantage_api_key),
             "yfinance": YahooFinanceProvider(),
         }
         ordered_names = [name.strip().lower() for name in settings.market_data_provider_order.split(",") if name.strip()]
         if not ordered_names:
-            ordered_names = ["twelvedata", "alphavantage", "yfinance"]
+            ordered_names = ["local_csv", "twelvedata", "alphavantage", "yfinance"]
+        # Always try local_csv first if available
+        if "local_csv" not in ordered_names:
+            ordered_names.insert(0, "local_csv")
         providers: list[BaseMarketDataProvider] = []
         for name in ordered_names:
             provider = available.get(name)

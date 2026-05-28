@@ -8,6 +8,7 @@ bot/.venv/
 data/app.db
 data/runs/*.json
 data/strategies/*.json
+data/historical/*.csv
 data_test/
 *.egg-info/
 dist/
