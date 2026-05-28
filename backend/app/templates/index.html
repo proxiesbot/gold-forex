@@ -124,6 +124,7 @@
           <button class="workspace-tab" data-workspace="vaultWorkspace" type="button"><span class="icon">🗂️</span><span>Strategy Vault</span></button>
           <button class="workspace-tab" data-workspace="templateWorkspace" type="button"><span class="icon">🧩</span><span>Template Lab</span></button>
           <button class="workspace-tab" data-workspace="runsWorkspace" type="button"><span class="icon">📚</span><span>Run Explorer</span></button>
+          <button class="workspace-tab" data-workspace="patternTeacherWorkspace" type="button"><span class="icon">🎓</span><span>Pattern Teacher</span></button>
           <button class="workspace-tab" data-workspace="diagnosticsWorkspace" type="button"><span class="icon">🛠️</span><span>Diagnostics</span></button>
         </div>
       </div>
@@ -455,6 +456,135 @@
                 <span class="badge">Current run</span>
               </div>
               <pre id="currentRunSummary">لم يتم تحميل أي run بعد.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="patternTeacherWorkspace" class="workspace">
+        <div class="vault-grid">
+          <div class="workspace-panel">
+            <div class="list-head">
+              <div>
+                <h4 style="margin:0">Pattern Teacher</h4>
+                <p class="muted micro" style="margin:6px 0 0">علّم البوت أي نمط (QM، أو أي شي) — أشّر على الشارت وهو يتعلّم ويدوّر.</p>
+              </div>
+              <span class="badge">علّم → ابحث</span>
+            </div>
+
+            <div class="workspace-panel" style="margin-top:14px; background:var(--surface-alt, #1a1e2b); border-radius:10px; padding:18px">
+              <h4 style="margin:0 0 8px">1. علّم النمط</h4>
+              <p class="muted micro">اختر الفريم، ارسم swing points على الشارت (قمم وقيعان)، حدد وين الزون، واكتب الشرح.</p>
+
+              <div class="subgrid" style="margin-top:14px">
+                <div>
+                  <label for="ptName">اسم النمط</label>
+                  <input id="ptName" type="text" placeholder="مثلاً: QM Bullish" />
+                </div>
+                <div>
+                  <label for="ptDirection">الاتجاه</label>
+                  <select id="ptDirection">
+                    <option value="bullish">صعودي (Bullish)</option>
+                    <option value="bearish">هبوطي (Bearish)</option>
+                    <option value="either">الاثنين</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="subgrid" style="margin-top:12px">
+                <div>
+                  <label for="ptHTF">فريم الكشف (HTF)</label>
+                  <select id="ptHTF">
+                    <option value="4h">4H</option>
+                    <option value="1h">1H</option>
+                    <option value="30m" selected>30m</option>
+                    <option value="15m">15m</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ptLTF">فريم الدخول (LTF)</label>
+                  <select id="ptLTF">
+                    <option value="15m">15m</option>
+                    <option value="5m" selected>5m</option>
+                    <option value="3m">3m</option>
+                  </select>
+                </div>
+              </div>
+
+              <label for="ptDescription" style="margin-top:14px">الشرح الكتابي (بالعربي أو إنجليزي)</label>
+              <textarea id="ptDescription" style="min-height:100px" placeholder="اشرح النمط هون... مثلاً: QM يعني السعر يعمل left shoulder ثم head أعمق ثم right shoulder والدخول عند كسر neckline والزون عند آخر قاع قبل الكسر"></textarea>
+
+              <div style="margin-top:14px">
+                <label>Swing Points (أشّر على الشارت أو أضف يدوياً)</label>
+                <div class="annotation-toolbar" style="margin-top:8px">
+                  <button class="tool-btn active" type="button" onclick="ptSetDrawMode('high')">قمة (H)</button>
+                  <button class="tool-btn" type="button" onclick="ptSetDrawMode('low')">قاع (L)</button>
+                  <button class="tool-btn" type="button" onclick="ptSetDrawMode('zone')">الزون</button>
+                  <button class="tool-btn" type="button" onclick="ptLoadChart()">حمّل الشارت</button>
+                  <button class="tool-btn" type="button" onclick="ptUndo()">تراجع</button>
+                  <button class="tool-btn danger" type="button" onclick="ptClearPoints()">مسح الكل</button>
+                </div>
+              </div>
+
+              <div class="annotation-shell" style="margin-top:12px">
+                <svg id="ptChart" viewBox="0 0 920 400" preserveAspectRatio="none"></svg>
+              </div>
+              <div id="ptChartHint" class="micro muted" style="margin-top:8px">حمّل الشارت ثم اضغط على القمم والقيعان بالترتيب اللي بتحددهم. الزون = المنطقة يلي بتتوقع الدخول منها.</div>
+
+              <label style="margin-top:14px">النقاط المحددة:</label>
+              <div id="ptPointsList" class="pill-list" style="min-height:40px"></div>
+
+              <div class="row" style="margin-top:16px">
+                <button class="btn btn-primary" type="button" onclick="ptTeachPattern()">🎓 علّم النمط</button>
+                <button class="btn btn-ghost" type="button" onclick="ptAddExample()">➕ أضف مثال إضافي</button>
+              </div>
+            </div>
+
+            <div class="workspace-panel" style="margin-top:14px; background:var(--surface-alt, #1a1e2b); border-radius:10px; padding:18px">
+              <h4 style="margin:0 0 8px">2. ابحث عن النمط</h4>
+              <p class="muted micro">اختر نمط محفوظ وشغّل البحث — البوت يدوّر على كل الحالات المشابهة.</p>
+
+              <div class="subgrid" style="margin-top:12px">
+                <div>
+                  <label for="ptSearchPattern">النمط</label>
+                  <select id="ptSearchPattern"><option value="">-- اختر نمط --</option></select>
+                </div>
+                <div>
+                  <label for="ptSearchMax">أقصى عدد نتائج</label>
+                  <input id="ptSearchMax" type="number" value="50" min="5" max="200" />
+                </div>
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn btn-secondary" type="button" onclick="ptSearchPattern()">🔍 دوّر على الشارت</button>
+                <button class="btn btn-ghost" type="button" onclick="ptSearchWithLTF()">📊 دوّر + حلل LTF</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>الأنماط المحفوظة</h4>
+                  <p>كل الأنماط اللي علّمتها للبوت.</p>
+                </div>
+                <span class="badge">Learned patterns</span>
+              </div>
+              <div id="ptSavedList" class="list-scroll" style="max-height:300px">
+                <div class="micro muted">لسا ما علّمت البوت أي نمط. ابدأ بتعليمه من القسم الأول.</div>
+              </div>
+            </div>
+
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>نتائج البحث</h4>
+                  <p>الحالات اللي لقاها البوت مطابقة للنمط.</p>
+                </div>
+                <span class="badge">Matches</span>
+              </div>
+              <pre id="ptResults">علّم النمط أولاً ثم اضغط "دوّر".</pre>
+              <div id="ptMatchCards" class="trade-card-grid" style="margin-top:12px"></div>
             </div>
           </div>
         </div>

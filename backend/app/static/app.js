@@ -1257,3 +1257,346 @@ setThisWeek();
 bindAnnotationBoard();
 setAnnotationDrawMode('line');
 bootDashboard(true);
+
+
+// ─── Pattern Teacher ─────────────────────────────────────────────────────────
+
+const ptState = {
+  points: [],        // {type: "high"|"low"|"zone", price: number, timestamp: string, label: string, is_zone: bool}
+  drawMode: 'high',  // "high", "low", "zone"
+  candles: [],
+  geometry: null,
+  chartLoaded: false,
+  savedPatterns: [],
+};
+
+function ptSetDrawMode(mode) {
+  ptState.drawMode = mode;
+  document.querySelectorAll('#patternTeacherWorkspace .annotation-toolbar .tool-btn').forEach(btn => btn.classList.remove('active'));
+  const labels = {'high': 'قمة (H)', 'low': 'قاع (L)', 'zone': 'الزون'};
+  document.querySelectorAll('#patternTeacherWorkspace .annotation-toolbar .tool-btn').forEach(btn => {
+    if (btn.textContent.trim() === labels[mode]) btn.classList.add('active');
+  });
+  const hint = mode === 'zone' ? 'اضغط على الشارت لتحديد الزون (منطقة الدخول)' : `اضغط على ${mode === 'high' ? 'القمم' : 'القيعان'} بالترتيب`;
+  $('ptChartHint').textContent = hint;
+}
+
+async function ptLoadChart() {
+  const tf = $('ptHTF').value;
+  const symbol = APP_META.chartSymbol;
+  showStatus(true);
+  try {
+    const now = new Date();
+    const start = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+    const res = await apiFetch('/api/chart/context', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({symbol, timeframe: tf, start_time: start.toISOString(), end_time: now.toISOString()})
+    });
+    ptState.candles = res.items || [];
+    ptState.chartLoaded = true;
+    ptState.points = [];
+    ptRenderChart();
+    ptRenderPoints();
+    $('ptChartHint').textContent = `تم تحميل ${ptState.candles.length} شمعة على ${tf}. ابدأ بتحديد النقاط.`;
+    toast('الشارت جاهز', `${ptState.candles.length} شمعة على ${tf}`, 'success');
+  } catch (e) {
+    toast('خطأ', 'فشل تحميل الشارت: ' + e.message, 'error');
+  }
+  showStatus(false);
+}
+
+function ptRenderChart() {
+  const svg = $('ptChart');
+  if (!svg || !ptState.candles.length) return;
+  const candles = ptState.candles.slice(-200); // Show last 200
+  const W = 920, H = 400, PAD = 40;
+  const highs = candles.map(c => c.high);
+  const lows = candles.map(c => c.low);
+  const maxP = Math.max(...highs);
+  const minP = Math.min(...lows);
+  const range = maxP - minP || 1;
+  const xStep = (W - PAD * 2) / candles.length;
+  const yScale = (p) => PAD + ((maxP - p) / range) * (H - PAD * 2);
+
+  ptState.geometry = {candles, W, H, PAD, maxP, minP, range, xStep, yScale};
+
+  let html = `<rect width="${W}" height="${H}" fill="var(--surface, #141720)" rx="8"/>`;
+  // Price grid
+  for (let i = 0; i <= 4; i++) {
+    const p = minP + (range * i / 4);
+    const y = yScale(p);
+    html += `<line x1="${PAD}" y1="${y}" x2="${W-PAD}" y2="${y}" stroke="var(--border, #2a2e3a)" stroke-width="0.5"/>`;
+    html += `<text x="${PAD-4}" y="${y+4}" text-anchor="end" fill="var(--muted, #888)" font-size="10">${p.toFixed(1)}</text>`;
+  }
+  // Candles
+  candles.forEach((c, i) => {
+    const x = PAD + i * xStep + xStep / 2;
+    const oY = yScale(c.open), cY = yScale(c.close), hY = yScale(c.high), lY = yScale(c.low);
+    const bull = c.close >= c.open;
+    const color = bull ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
+    html += `<line x1="${x}" y1="${hY}" x2="${x}" y2="${lY}" stroke="${color}" stroke-width="1"/>`;
+    html += `<rect x="${x - xStep*0.35}" y="${Math.min(oY,cY)}" width="${xStep*0.7}" height="${Math.max(1, Math.abs(oY-cY))}" fill="${color}" rx="1"/>`;
+  });
+
+  // Draw marked points
+  ptState.points.forEach((pt, idx) => {
+    const candleIdx = ptFindCandleIndex(pt.timestamp);
+    if (candleIdx < 0) return;
+    const x = PAD + candleIdx * xStep + xStep / 2;
+    const y = yScale(pt.price);
+    const color = pt.type === 'high' ? '#f59e0b' : pt.type === 'low' ? '#3b82f6' : '#a855f7';
+    const label = pt.is_zone ? 'Z' : (pt.type === 'high' ? 'H' : 'L');
+    html += `<circle cx="${x}" cy="${y}" r="6" fill="${color}" stroke="white" stroke-width="1.5"/>`;
+    html += `<text x="${x}" y="${y - 10}" text-anchor="middle" fill="${color}" font-size="11" font-weight="bold">${label}${idx+1}</text>`;
+    if (pt.is_zone) {
+      const zoneH = (pt.zone_high || pt.price * 1.002);
+      html += `<rect x="${PAD}" y="${yScale(zoneH)}" width="${W - PAD*2}" height="${yScale(pt.price) - yScale(zoneH)}" fill="${color}" opacity="0.15" rx="3"/>`;
+    }
+  });
+
+  svg.innerHTML = html;
+
+  // Click handler
+  svg.onclick = (e) => ptHandleChartClick(e);
+}
+
+function ptFindCandleIndex(timestamp) {
+  if (!ptState.geometry) return -1;
+  const candles = ptState.geometry.candles;
+  const ts = new Date(timestamp).getTime() / 1000;
+  let closest = 0, minDiff = Infinity;
+  candles.forEach((c, i) => {
+    const diff = Math.abs(c.time - ts);
+    if (diff < minDiff) { minDiff = diff; closest = i; }
+  });
+  return closest;
+}
+
+function ptHandleChartClick(e) {
+  if (!ptState.chartLoaded || !ptState.geometry) return;
+  const svg = $('ptChart');
+  const rect = svg.getBoundingClientRect();
+  const svgX = (e.clientX - rect.left) / rect.width * ptState.geometry.W;
+  const svgY = (e.clientY - rect.top) / rect.height * ptState.geometry.H;
+
+  const {candles, PAD, xStep, maxP, range, H} = ptState.geometry;
+  const candleIdx = Math.floor((svgX - PAD) / xStep);
+  if (candleIdx < 0 || candleIdx >= candles.length) return;
+
+  const candle = candles[candleIdx];
+  const price = maxP - ((svgY - PAD) / (H - PAD * 2)) * range;
+
+  // Snap to candle high/low based on mode
+  let snapPrice = price;
+  if (ptState.drawMode === 'high') snapPrice = candle.high;
+  else if (ptState.drawMode === 'low') snapPrice = candle.low;
+
+  const point = {
+    type: ptState.drawMode === 'zone' ? (price > (candle.high + candle.low) / 2 ? 'high' : 'low') : ptState.drawMode,
+    price: Math.round(snapPrice * 1000) / 1000,
+    timestamp: new Date(candle.time * 1000).toISOString(),
+    label: ptState.drawMode === 'zone' ? 'zone' : `${ptState.drawMode} ${ptState.points.length + 1}`,
+    is_zone: ptState.drawMode === 'zone',
+    zone_high: ptState.drawMode === 'zone' ? Math.round(candle.high * 1000) / 1000 : undefined,
+  };
+
+  ptState.points.push(point);
+  ptRenderChart();
+  ptRenderPoints();
+}
+
+function ptRenderPoints() {
+  const container = $('ptPointsList');
+  if (!container) return;
+  if (ptState.points.length === 0) {
+    container.innerHTML = '<span class="micro muted">لم تحدد أي نقطة بعد.</span>';
+    return;
+  }
+  container.innerHTML = ptState.points.map((pt, i) => {
+    const icon = pt.is_zone ? '🟣' : (pt.type === 'high' ? '🟡' : '🔵');
+    const label = pt.is_zone ? 'Zone' : (pt.type === 'high' ? `High ${i+1}` : `Low ${i+1}`);
+    return `<div class="pill">${icon} ${label}: ${pt.price.toFixed(2)} <small>(${pt.timestamp.slice(0,16)})</small></div>`;
+  }).join('');
+}
+
+function ptUndo() {
+  ptState.points.pop();
+  ptRenderChart();
+  ptRenderPoints();
+}
+
+function ptClearPoints() {
+  ptState.points = [];
+  ptRenderChart();
+  ptRenderPoints();
+}
+
+async function ptTeachPattern() {
+  const name = $('ptName').value.trim();
+  const direction = $('ptDirection').value;
+  const description = $('ptDescription').value.trim();
+  const htf = $('ptHTF').value;
+  const ltf = $('ptLTF').value;
+
+  if (!name) { toast('خطأ', 'لازم تعطي اسم للنمط', 'error'); return; }
+  if (ptState.points.length < 2) { toast('خطأ', 'حدد على الأقل نقطتين (قمة وقاع)', 'error'); return; }
+  if (!description) { toast('خطأ', 'اكتب شرح بسيط للنمط', 'error'); return; }
+
+  showStatus(true);
+  try {
+    const res = await apiFetch('/api/patterns/teach', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name,
+        direction,
+        description,
+        htf,
+        ltf,
+        annotations: ptState.points,
+      })
+    });
+    toast('تم التعليم!', `النمط "${res.name}" محفوظ (${res.swing_count} نقاط)`, 'success');
+    ptState.points = [];
+    ptRenderChart();
+    ptRenderPoints();
+    await ptLoadSavedPatterns();
+  } catch (e) {
+    toast('خطأ', e.message, 'error');
+  }
+  showStatus(false);
+}
+
+async function ptAddExample() {
+  const patternId = $('ptSearchPattern').value;
+  if (!patternId) { toast('خطأ', 'اختر نمط من القائمة أولاً', 'error'); return; }
+  if (ptState.points.length < 2) { toast('خطأ', 'حدد نقاط المثال على الشارت', 'error'); return; }
+
+  showStatus(true);
+  try {
+    const res = await apiFetch(`/api/patterns/${patternId}/examples`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({annotations: ptState.points, notes: $('ptDescription').value})
+    });
+    toast('تم', 'المثال الإضافي محفوظ', 'success');
+    ptState.points = [];
+    ptRenderChart();
+    ptRenderPoints();
+  } catch (e) {
+    toast('خطأ', e.message, 'error');
+  }
+  showStatus(false);
+}
+
+async function ptSearchPattern() {
+  const patternId = $('ptSearchPattern').value;
+  if (!patternId) { toast('خطأ', 'اختر نمط من القائمة', 'error'); return; }
+  const maxResults = parseInt($('ptSearchMax').value) || 50;
+
+  showStatus(true);
+  try {
+    const res = await apiFetch('/api/patterns/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pattern_id: patternId, max_matches: maxResults, include_ltf: false})
+    });
+    ptDisplayResults(res);
+  } catch (e) {
+    toast('خطأ', e.message, 'error');
+  }
+  showStatus(false);
+}
+
+async function ptSearchWithLTF() {
+  const patternId = $('ptSearchPattern').value;
+  if (!patternId) { toast('خطأ', 'اختر نمط من القائمة', 'error'); return; }
+  const maxResults = parseInt($('ptSearchMax').value) || 50;
+
+  showStatus(true);
+  try {
+    const res = await apiFetch('/api/patterns/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pattern_id: patternId, max_matches: maxResults, include_ltf: true})
+    });
+    ptDisplayResults(res);
+  } catch (e) {
+    toast('خطأ', e.message, 'error');
+  }
+  showStatus(false);
+}
+
+function ptDisplayResults(res) {
+  const pre = $('ptResults');
+  const cards = $('ptMatchCards');
+
+  if (!res.matches || res.matches.length === 0) {
+    pre.textContent = res.summary || 'لم يتم العثور على تطابقات.';
+    cards.innerHTML = '';
+    return;
+  }
+
+  pre.textContent = `${res.summary}\n\nإجمالي: ${res.total_matches} تطابق | طازج: ${res.fresh} | مُختبر: ${res.tested} | مكسور: ${res.broken}` +
+    (res.stats?.win_rate ? `\nWin rate: ${res.stats.win_rate}% | Avg RR: ${res.stats.avg_rr}` : '');
+
+  cards.innerHTML = res.matches.slice(0, 20).map(m => `
+    <div class="trade-card">
+      <div class="trade-card-head">
+        <span class="badge">${m.direction}</span>
+        <span class="badge">${m.freshness}</span>
+        <span class="micro">${m.similarity_score}% match</span>
+      </div>
+      <div class="trade-card-body">
+        <div><strong>Zone:</strong> ${m.zone_low} → ${m.zone_high}</div>
+        <div><strong>Time:</strong> ${(m.timestamp || '').slice(0, 16)}</div>
+        <div><strong>Session:</strong> ${m.session_label}</div>
+        ${m.reaction ? `<div><strong>LTF:</strong> ${m.reaction.outcome} (${m.reaction.ltf_pattern}) RR=${m.reaction.rr_ratio}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  toast('نتائج', `${res.total_matches} تطابق للنمط`, 'success');
+}
+
+async function ptLoadSavedPatterns() {
+  try {
+    const res = await apiFetch('/api/patterns/list');
+    ptState.savedPatterns = res.patterns || [];
+    // Update select dropdown
+    const select = $('ptSearchPattern');
+    select.innerHTML = '<option value="">-- اختر نمط --</option>' +
+      ptState.savedPatterns.map(p => `<option value="${p.pattern_id}">${p.name} (${p.direction}, ${p.examples_count} أمثلة)</option>`).join('');
+
+    // Update saved list display
+    const list = $('ptSavedList');
+    if (ptState.savedPatterns.length === 0) {
+      list.innerHTML = '<div class="micro muted">لسا ما علّمت البوت أي نمط.</div>';
+    } else {
+      list.innerHTML = ptState.savedPatterns.map(p => `
+        <div class="vault-card" onclick="$('ptSearchPattern').value='${p.pattern_id}'">
+          <div><strong>${p.name}</strong></div>
+          <div class="micro muted">${p.direction} | ${p.swing_count} نقاط | ${p.examples_count} أمثلة</div>
+          <div class="micro">${p.description}</div>
+        </div>
+      `).join('');
+    }
+  } catch (_) {}
+}
+
+// Boot pattern teacher on workspace switch
+const origSwitchWorkspace = window.switchWorkspace;
+if (typeof origSwitchWorkspace === 'function') {
+  window.switchWorkspace = function(ws) {
+    origSwitchWorkspace(ws);
+    if (ws === 'patternTeacherWorkspace') ptLoadSavedPatterns();
+  };
+} else {
+  // Fallback: load on tab click
+  document.querySelectorAll('.workspace-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (tab.dataset.workspace === 'patternTeacherWorkspace') ptLoadSavedPatterns();
+    });
+  });
+}

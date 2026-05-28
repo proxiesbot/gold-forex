@@ -170,28 +170,41 @@ class ResearchScanner:
 
 
     def _run_qm_scan(self, strategy, htf, ltf, request, htf_report, ltf_report) -> ResearchRunResponse:
-        """Run QM (Quasimodo) pattern detection - Phase 1 + Phase 2."""
-        from app.engine.pattern_detector import PatternDetector
+        """Run pattern detection using learned patterns or generic swing search."""
+        from app.engine.pattern_detector import LearnedPatternMatcher, LearnedPattern
+        from app.engine.custom_patterns import PatternStore
 
-        detector = PatternDetector(
-            swing_lookback=max(3, request.source_lookback // 4),
-            zone_buffer_pct=0.001,
-        )
-        result = detector.full_scan(
+        store = PatternStore()
+        # Try to find a user-taught pattern named QM or matching strategy
+        pattern = store.find_by_name("qm") or store.find_by_name(strategy.strategy_key)
+
+        if pattern is None:
+            # Create a default generic pattern for swing-based search
+            matcher = LearnedPatternMatcher(swing_lookback=max(3, request.source_lookback // 4))
+            # Use generic annotations that match any 3-swing sequence
+            default_annotations = [
+                {"type": "low" if strategy.direction == "bullish" else "high", "price": 0, "label": "point 1"},
+                {"type": "high" if strategy.direction == "bullish" else "low", "price": 0, "label": "point 2"},
+                {"type": "low" if strategy.direction == "bullish" else "high", "price": 0, "label": "zone", "is_zone": True},
+            ]
+            pattern = matcher.learn_from_example(default_annotations, "Auto-generated swing pattern", strategy.direction, "auto_qm")
+        else:
+            matcher = LearnedPatternMatcher(swing_lookback=max(3, request.source_lookback // 4))
+
+        result = matcher.full_scan(
+            pattern=pattern,
             htf_df=htf,
             ltf_df=ltf,
-            direction=strategy.direction,
-            max_levels=request.max_setups * 3,
+            max_matches=request.max_setups * 3,
             outcome_window=request.outcome_window_bars,
         )
 
-        # Convert QM levels + reactions into SetupResult format
+        # Convert matches + reactions into SetupResult format
         setups: list[SetupResult] = []
-        level_map = {l.level_id: l for l in result.levels}
-        reaction_map = {r.level_id: r for r in result.ltf_reactions}
+        reaction_map = {r.match_id: r for r in result.ltf_reactions}
 
-        for level in result.levels:
-            reaction = reaction_map.get(level.level_id)
+        for match in result.levels:
+            reaction = reaction_map.get(match.match_id)
             outcome_label = "untested"
             move = 0.0
             adverse = 0.0
@@ -219,21 +232,22 @@ class ResearchScanner:
                 execution_model = reaction.ltf_pattern
                 execution_notes = reaction.explanation
 
-            quality_label = "A" if level.quality_score >= 82 else "B" if level.quality_score >= 68 else "C" if level.quality_score >= 52 else "D"
+            quality_score = match.similarity_score
+            quality_label = "A" if quality_score >= 82 else "B" if quality_score >= 68 else "C" if quality_score >= 52 else "D"
 
-            tags = ["qm", level.direction, level.freshness, level.session_label.lower()]
+            tags = [strategy.strategy_key, match.direction, match.freshness, match.session_label.lower()]
             if reaction:
                 tags.append(reaction.ltf_pattern)
 
             setups.append(SetupResult(
-                setup_id=level.level_id,
-                htf_time=level.timestamp,
-                source_type="qm",
-                source_direction=level.direction,
-                session_label=level.session_label,
-                zone_low=level.zone_low,
-                zone_high=level.zone_high,
-                entry_reference_price=level.zone_mid,
+                setup_id=match.match_id,
+                htf_time=match.timestamp,
+                source_type=strategy.strategy_key,
+                source_direction=match.direction,
+                session_label=match.session_label,
+                zone_low=match.zone_low,
+                zone_high=match.zone_high,
+                entry_reference_price=match.zone_mid,
                 entry_price=entry_price,
                 stop_loss=stop_loss,
                 take_profit=take_profit,
@@ -246,25 +260,25 @@ class ResearchScanner:
                 outcome_move_points=move,
                 adverse_move_points=adverse,
                 matched_steps_count=3 if reaction else 1,
-                quality_score=level.quality_score,
+                quality_score=quality_score,
                 quality_label=quality_label,
                 ltf_retest_time=ltf_retest_time,
-                confirmation_chain=[f"qm_formed@{level.timestamp}"] + ([f"ltf_reaction@{reaction.reaction_time}"] if reaction else []),
+                confirmation_chain=[f"pattern@{match.timestamp}"] + ([f"ltf@{reaction.reaction_time}"] if reaction else []),
                 tags=tags,
                 chart_focus={
-                    "zone_low": level.zone_low,
-                    "zone_high": level.zone_high,
-                    "zone_mid": level.zone_mid,
-                    "swing_points": level.swing_points,
-                    "freshness": level.freshness,
-                    "touches": level.touches_after,
+                    "zone_low": match.zone_low,
+                    "zone_high": match.zone_high,
+                    "zone_mid": match.zone_mid,
+                    "swing_points": match.swing_points,
+                    "freshness": match.freshness,
+                    "touches": match.touches_after,
+                    "similarity": match.similarity_score,
                 },
-                explanation=level.explanation + (reaction.explanation if reaction else [f"الحالة: {level.freshness} - لم يصل السعر لهذا المستوى بعد" if level.freshness == "fresh" else f"الحالة: {level.freshness}"]),
+                explanation=match.explanation + (reaction.explanation if reaction else [f"الحالة: {match.freshness}"]),
             ))
 
         setups.sort(key=lambda s: (s.quality_score, s.outcome_move_points), reverse=True)
 
-        # Build stats
         stats = {
             **result.stats,
             "labels": {"win": result.stats.get("wins", 0), "loss": result.stats.get("losses", 0), "untested": result.stats.get("fresh", 0)},
@@ -275,25 +289,25 @@ class ResearchScanner:
 
         scope = self._build_scope(strategy, htf, ltf)
         diagnostics = {
-            "scan_type": "qm_pattern",
+            "scan_type": "learned_pattern",
             "phases": "phase1_detect + phase2_ltf_reaction",
             "total_swing_points_analyzed": len(htf),
             "market_data": {"htf": htf_report, "ltf": ltf_report},
         }
 
         return ResearchRunResponse(
-            strategy_summary=f"{strategy.market_label}: {result.total_levels_found} QM levels ({result.fresh_levels} fresh, {result.tested_levels} tested, {result.broken_levels} broken)",
+            strategy_summary=f"{strategy.market_label}: {result.total_levels_found} pattern matches ({result.fresh_levels} fresh, {result.tested_levels} tested, {result.broken_levels} broken)",
             human_summary=result.summary,
             supported=True,
             total_candidates=result.total_levels_found,
             total_qualified=len(setups),
             setups=setups[:request.max_setups],
-            executed_plan=["qm_detect", "freshness_check", "ltf_reaction_analysis"],
+            executed_plan=["pattern_detect", "freshness_check", "ltf_reaction_analysis"],
             diagnostics=diagnostics,
             stats=stats,
             search_scope=scope,
             highlights=result.highlights,
-            warnings=["QM levels on small timeframes may have more noise." if strategy.primary_timeframe in {"5m", "1m"} else ""],
+            warnings=[],
         )
 
     def _apply_request_scope(self, constraints: dict, request: ResearchRunRequest) -> dict:
