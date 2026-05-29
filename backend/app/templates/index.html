@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XAU AI Research Bot — Enterprise Desk</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-chart-symbol="{{ chart_symbol }}" data-app-version="{{ app_version }}">
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark">XAU</div>
+      <div>
+        <h1>Enterprise Desk</h1>
+        <p>واجهة تشغيل ومراجعة وبحث احترافية لمساعد تحليل الذهب XAU مع نفس الـ API الحالية.</p>
+      </div>
+    </div>
+
+    <div class="rail-group">
+      <div class="rail-title">Navigation</div>
+      <a class="rail-link" href="#heroSection"><div><strong>القيادة الرئيسية</strong><small>ملخص الحالة السريع</small></div><div class="icon">⌘</div></a>
+      <a class="rail-link" href="#workspaceSection"><div><strong>مساحة العمل</strong><small>تحليل، استراتيجيات، وسجل التشغيل</small></div><div class="icon">🧠</div></a>
+      <a class="rail-link" href="#resultsSection"><div><strong>مركز النتائج</strong><small>KPIs، الشارت، والتفاصيل</small></div><div class="icon">📈</div></a>
+      <a class="rail-link" href="#systemSection"><div><strong>النظام والتشخيص</strong><small>الصحة، البيئة، والتفضيلات</small></div><div class="icon">🛡️</div></a>
+    </div>
+
+    <div class="rail-group">
+      <div class="rail-title">Quick launch</div>
+      <button class="chip-link" type="button" onclick="applyQuickPrompt('حلل الذهب اليوم'); switchWorkspace('researchWorkspace'); scrollToSection('workspaceSection')"><div><strong>حلل الذهب اليوم</strong><small>بحث سريع بالقيم الآمنة</small></div><div class="icon">⚡</div></button>
+      <button class="chip-link" type="button" onclick="applyQuickPrompt('اعمل backtest على XAUUSD فريم 15m آخر 30 يوم'); switchWorkspace('researchWorkspace'); scrollToSection('workspaceSection')"><div><strong>Backtest 15m</strong><small>آخر 30 يوم</small></div><div class="icon">🕒</div></button>
+      <button class="chip-link" type="button" onclick="applyQuickPrompt('scan gold 1h last 90 days'); switchWorkspace('researchWorkspace'); scrollToSection('workspaceSection')"><div><strong>Scan 1h</strong><small>آخر 90 يوم</small></div><div class="icon">🔍</div></button>
+    </div>
+
+    <div class="rail-status">
+      <strong id="heroHealthRail" class="status-dot">Checking…</strong>
+      <span>المشروع الآن مهيأ ليعمل حتى لو البوت غير مفعّل، وبدون أي demo data.</span>
+    </div>
+
+    <div class="rail-group">
+      <div class="rail-title">Live counters</div>
+      <div class="surface">
+        <div class="label">Saved runs</div>
+        <div id="railRunCount" class="metric value" style="font-size:26px">-</div>
+        <div class="micro muted">عدد التشغيلات المخزنة حاليًا.</div>
+      </div>
+      <div class="surface">
+        <div class="label">Saved strategies</div>
+        <div id="railStrategyCount" class="metric value" style="font-size:26px">-</div>
+        <div class="micro muted">استراتيجيات محفوظة داخل الـ vault.</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h2>XAU AI Research Bot — Control Surface</h2>
+        <p>واجهة تشغيل أنيقة مع Workspaces منفصلة، فلترة، تاريخ تشغيلات، وشاشة مراجعة أغنى بصريًا.</p>
+      </div>
+      <div class="top-actions">
+        <span class="badge">{{ chart_symbol }}</span>
+        <span id="versionChip" class="badge">v{{ app_version }}</span>
+        <button id="themeToggle" class="icon-btn" title="تبديل الثيم">☀️</button>
+        <button class="icon-btn" title="تحديث" onclick="bootDashboard(false)">⟳</button>
+      </div>
+    </div>
+
+    <section id="heroSection" class="hero">
+      <div class="panel hero-main">
+        <div class="eyebrow">Gold research cockpit</div>
+        <h3>شاشة تشغيل أجمل، أوضح، وأقرب إلى منصة تحليل احترافية فعلًا.</h3>
+        <p>
+          هذه النسخة تنظّم المشروع إلى Workspaces منفصلة: البحث والتحليل، خزنة الاستراتيجيات، مستكشف التشغيلات، والتشخيص. أضفت أيضًا فلترة مباشرة، رسم اتجاه جودة الـ runs، ولوحة نتائج أنظف لعرض الأداء والـ setups والشارت من مكان واحد.
+        </p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" type="button" onclick="switchWorkspace('researchWorkspace'); scrollToSection('workspaceSection')">ابدأ التحليل</button>
+          <button class="btn btn-secondary" type="button" onclick="switchWorkspace('runsWorkspace'); scrollToSection('workspaceSection')">استكشف الـ runs</button>
+          <button class="btn btn-ghost" type="button" onclick="switchWorkspace('vaultWorkspace'); scrollToSection('workspaceSection')">افتح Strategy Vault</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="section-title">
+          <div>
+            <h3>لقطة سريعة</h3>
+            <p>مؤشرات جاهزة لأهم ما تحتاجه قبل التشغيل.</p>
+          </div>
+          <span class="badge">Live overview</span>
+        </div>
+        <div class="hero-grid">
+          <div class="metric">
+            <div class="label">System health</div>
+            <div id="heroHealth" class="value">—</div>
+            <div class="sub">فحص حي لحالة السيرفر والجاهزية.</div>
+          </div>
+          <div class="metric">
+            <div class="label">Environment</div>
+            <div id="envMetric" class="value">—</div>
+            <div class="sub">بيئة التشغيل الحالية للتطبيق.</div>
+          </div>
+          <div class="metric">
+            <div class="label">Runs saved</div>
+            <div id="runCountHero" class="value">0</div>
+            <div class="sub">يمكن تحميل أي run سابق ومراجعته مباشرة.</div>
+          </div>
+          <div class="metric">
+            <div class="label">Strategies saved</div>
+            <div id="strategyCountHero" class="value">0</div>
+            <div class="sub">خزنة الاستراتيجيات قابلة للبحث والتحميل.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="workspaceSection" class="panel">
+      <div class="section-title">
+        <div>
+          <h3>Workspaces</h3>
+          <p>قسّمت الواجهة إلى أربع مساحات عمل مخصصة بدل صفحة واحدة مزدحمة.</p>
+        </div>
+        <div class="workspace-tabs">
+          <button class="workspace-tab active" data-workspace="researchWorkspace" type="button"><span class="icon">🧠</span><span>Research Studio</span></button>
+          <button class="workspace-tab" data-workspace="vaultWorkspace" type="button"><span class="icon">🗂️</span><span>Strategy Vault</span></button>
+          <button class="workspace-tab" data-workspace="templateWorkspace" type="button"><span class="icon">🧩</span><span>Template Lab</span></button>
+          <button class="workspace-tab" data-workspace="runsWorkspace" type="button"><span class="icon">📚</span><span>Run Explorer</span></button>
+          <button class="workspace-tab" data-workspace="patternTeacherWorkspace" type="button"><span class="icon">🎓</span><span>Pattern Teacher</span></button>
+          <button class="workspace-tab" data-workspace="diagnosticsWorkspace" type="button"><span class="icon">🛠️</span><span>Diagnostics</span></button>
+        </div>
+      </div>
+
+      <div id="researchWorkspace" class="workspace active">
+        <div class="research-grid">
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Composer</h4>
+                  <p>اكتب بالعربي أو الإنجليزي ثم افهم الاستراتيجية أو شغّلها أو احفظها.</p>
+                </div>
+                <span class="badge">Research / Scan / Backtest</span>
+              </div>
+
+              <div class="quick-grid" style="margin-bottom:14px">
+                <div class="quick-card" onclick="applyQuickPrompt('حلل الذهب اليوم')"><strong>حلل الذهب اليوم</strong><span>تحليل سريع بالعربي بالقيم الافتراضية الآمنة.</span></div>
+                <div class="quick-card" onclick="applyQuickPrompt('اعمل backtest على XAUUSD فريم 15m آخر 30 يوم')"><strong>Backtest 15m</strong><span>تشغيل جاهز لآخر 30 يوم.</span></div>
+                <div class="quick-card" onclick="applyQuickPrompt('scan gold 1h last 90 days')"><strong>Scan 1h</strong><span>قالب إنجليزي لفحص الذهب 1h.</span></div>
+                <div class="quick-card" onclick="applyQuickPrompt('اختبر استراتيجية liquidity sweep على الذهب 4h')"><strong>Liquidity sweep</strong><span>بداية سريعة لاستراتيجية محددة.</span></div>
+              </div>
+
+              <label for="prompt">وصف الاستراتيجية</label>
+              <textarea id="prompt">حدد ذيل شمعة BOS في هيكلية صاعدة على فريم 15 وبعدها على فريم 5 إذا نزل السعر تحت الذيل ورجع يسكر فوقه اعتبرها فرصة</textarea>
+
+              <div class="subgrid" style="margin-top:14px">
+                <div>
+                  <label for="fromDate">من</label>
+                  <input id="fromDate" type="date" />
+                </div>
+                <div>
+                  <label for="toDate">إلى</label>
+                  <input id="toDate" type="date" />
+                </div>
+              </div>
+
+              <div class="row" style="margin-top:14px">
+                <button class="btn btn-primary" type="button" onclick="interpretStrategy()">✨ فهم الاستراتيجية</button>
+                <button class="btn btn-secondary" type="button" onclick="runResearch()">📊 تشغيل</button>
+                <button class="btn btn-success" type="button" onclick="optimizeStrategy()">🧠 اختيار أفضل ربط</button>
+                <button class="btn btn-ghost" type="button" onclick="saveStrategy()">💾 حفظ</button>
+              </div>
+              <div id="loadingStatus" class="status-banner">جاري تجهيز الطلب وتحليل الاستراتيجية وفحص البيانات والنتائج…</div>
+            </div>
+
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Presets جاهزة</h4>
+                  <p>قوالب سريعة للتجربة أو المقارنة قبل التخصيص.</p>
+                </div>
+                <span class="badge">Templates</span>
+              </div>
+              <div id="presetGrid" class="list-scroll" style="max-height:380px"></div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Strategy Preview</h4>
+                  <p>الفهم الحالي، التحذيرات، وتصحيح سريع.</p>
+                </div>
+                <span class="badge">Interpreter</span>
+              </div>
+              <label>الفهم الحالي</label>
+              <pre id="preview">لم يتم التحليل بعد.</pre>
+              <label style="margin-top:12px">التحذيرات والملاحظات</label>
+              <pre id="warnings">-</pre>
+              <label style="margin-top:12px" for="correctionText">تصحيح سريع</label>
+              <textarea id="correctionText" style="min-height:130px">خلي النتائج المختصرة فقط، وإذا ما في FVG رجّع setups التي وصلت إلى reclaim و MSS.</textarea>
+              <div class="row" style="margin-top:12px">
+                <button class="btn btn-ghost" type="button" onclick="applyCorrection()">✍️ تطبيق التصحيح</button>
+              </div>
+            </div>
+
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>النطاق الحالي</h4>
+                  <p>النافذة الزمنية المعتمدة وقت التشغيل.</p>
+                </div>
+                <span class="badge">Runtime scope</span>
+              </div>
+              <pre id="scopeBox">-</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="vaultWorkspace" class="workspace">
+        <div class="vault-grid">
+          <div class="workspace-panel">
+            <div class="list-head">
+              <div>
+                <h4 style="margin:0">Strategy Vault</h4>
+                <p class="muted micro" style="margin:6px 0 0">فلترة، تحميل سريع، ومراجعة الخصائص الأساسية لكل استراتيجية محفوظة.</p>
+              </div>
+              <span class="badge">Saved strategies</span>
+            </div>
+            <div class="search-inline">
+              <input id="strategySearch" type="search" placeholder="ابحث بالاسم أو الفريم أو الاتجاه…" />
+            </div>
+            <div id="savedList" class="list-scroll" style="margin-top:12px"></div>
+          </div>
+
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Strategy Inspector</h4>
+                  <p>تفاصيل الاستراتيجية المحددة بشكل مريح للمراجعة.</p>
+                </div>
+                <span class="badge">Inspector</span>
+              </div>
+              <pre id="strategyInspector">اختر استراتيجية من القائمة لعرض تفاصيلها هنا.</pre>
+            </div>
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>تفضيلات التعلّم</h4>
+                  <p>ما الذي تعلّمه النظام من استراتيجياتك وتصحيحاتك.</p>
+                </div>
+                <span class="badge">Preferences</span>
+              </div>
+              <pre id="prefsBox">-</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div id="templateWorkspace" class="workspace">
+        <div class="vault-grid">
+          <div class="workspace-panel">
+            <div class="list-head">
+              <div>
+                <h4 style="margin:0">Template Lab</h4>
+                <p class="muted micro" style="margin:6px 0 0">حوّل أي استراتيجية مفهومة إلى Template مسمّى، ثم أضف لها أمثلة Annotated وامسح السوق بنفس الشروط لاحقًا.</p>
+              </div>
+              <span class="badge">Named templates</span>
+            </div>
+            <div class="search-inline">
+              <input id="templateSearch" type="search" placeholder="ابحث في الـ templates…" />
+            </div>
+            <div id="templateList" class="list-scroll" style="margin-top:12px"></div>
+          </div>
+
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Template Builder</h4>
+                  <p>احفظ الفهم الحالي باسم واضح مع قواعد دخول وتأكيد، ثم عد له لاحقًا للفحص أو الباك تست.</p>
+                </div>
+                <span class="badge">Builder</span>
+              </div>
+              <div class="subgrid">
+                <div>
+                  <label for="templateName">اسم الـ Template</label>
+                  <input id="templateName" type="text" placeholder="مثال: Fresh 30m SNR + 3m FVG Entry" />
+                </div>
+                <div>
+                  <label for="templatePoiMode">POI mode</label>
+                  <select id="templatePoiMode">
+                    <option value="fvg_midpoint">FVG midpoint</option>
+                    <option value="fvg_open">FVG open</option>
+                    <option value="reaction_candle_midpoint">Reaction candle midpoint</option>
+                    <option value="zone_midpoint">Zone midpoint</option>
+                  </select>
+                </div>
+              </div>
+              <label for="templateDescription" style="margin-top:12px">الوصف</label>
+              <textarea id="templateDescription" style="min-height:100px" placeholder="ما هي الفكرة؟ ما الذي تعتبره fresh أو reaction أو trigger؟"></textarea>
+              <div class="subgrid" style="margin-top:12px">
+                <div>
+                  <label for="templateMaxTouches">Max touches</label>
+                  <input id="templateMaxTouches" type="number" min="0" max="5" value="1" />
+                </div>
+                <div>
+                  <label for="templateReactionMode">Reaction mode</label>
+                  <select id="templateReactionMode">
+                    <option value="wick_or_displacement">Wick or displacement</option>
+                    <option value="wick_only">Wick only</option>
+                    <option value="close_rejection">Close rejection</option>
+                    <option value="displacement_only">Displacement only</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row" style="margin-top:12px">
+                <label><input id="templateFreshOnly" type="checkbox" checked /> Fresh only</label>
+                <label><input id="templateReactionRequired" type="checkbox" checked /> Require reaction</label>
+                <label><input id="templateFvgRequired" type="checkbox" checked /> Require FVG</label>
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn btn-primary" type="button" onclick="saveTemplateFromCurrentStrategy()">🧩 حفظ كـ Template</button>
+                <button class="btn btn-secondary" type="button" onclick="prefillTemplateFromStrategy()">📥 تعبئة من الفهم الحالي</button>
+              </div>
+              <div class="micro muted" style="margin-top:10px">يعتمد الحفظ على الاستراتيجية الحالية الموجودة داخل Composer أو آخر run محمّل.</div>
+            </div>
+
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Annotated Example</h4>
+                  <p>علّم الاستراتيجية مباشرة فوق الشارت: ارسم level أو zone أو point، اختر التسمية، وسيتم توليد annotations JSON وحفظها مع الـ Template.</p>
+                </div>
+                <span class="badge">Chart annotation</span>
+              </div>
+              <div class="subgrid">
+                <div>
+                  <label for="exampleTitle">عنوان المثال</label>
+                  <input id="exampleTitle" type="text" placeholder="مثال: Fresh resistance touch with bearish FVG" />
+                </div>
+                <div>
+                  <label for="annotationTimeframe">Timeframe annotation</label>
+                  <select id="annotationTimeframe">
+                    <option value="30m">30m</option>
+                    <option value="15m">15m</option>
+                    <option value="5m">5m</option>
+                    <option value="3m" selected>3m</option>
+                    <option value="1m">1m</option>
+                  </select>
+                </div>
+              </div>
+              <div class="subgrid" style="margin-top:12px">
+                <div>
+                  <label for="annotationType">نوع العنصر</label>
+                  <select id="annotationType">
+                    <option value="snr">SNR</option>
+                    <option value="reaction">Reaction</option>
+                    <option value="fvg">FVG</option>
+                    <option value="poi">POI</option>
+                    <option value="entry">Entry</option>
+                    <option value="stop_loss">Stop loss</option>
+                    <option value="target">Target</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="annotationLabel">التسمية</label>
+                  <input id="annotationLabel" type="text" value="fresh resistance" placeholder="مثال: bearish fvg / entry area" />
+                </div>
+              </div>
+              <div class="annotation-toolbar" style="margin-top:12px">
+                <button id="toolLine" class="tool-btn active" type="button" onclick="setAnnotationDrawMode('line')">Level</button>
+                <button id="toolZone" class="tool-btn" type="button" onclick="setAnnotationDrawMode('zone')">Zone</button>
+                <button id="toolPoint" class="tool-btn" type="button" onclick="setAnnotationDrawMode('point')">Point</button>
+                <button class="tool-btn" type="button" onclick="loadAnnotationChart()">Load chart</button>
+                <button class="tool-btn" type="button" onclick="loadSelectedSetupIntoAnnotation()">Use selected setup</button>
+                <button class="tool-btn" type="button" onclick="syncExampleJsonToBoard()">Import JSON</button>
+                <button class="tool-btn" type="button" onclick="undoAnnotation()">Undo</button>
+                <button class="tool-btn danger" type="button" onclick="clearAnnotations()">Clear</button>
+              </div>
+              <div class="micro muted" id="annotationHint" style="margin-top:10px">حمّل الشارت ثم ارسم. Level = خط أفقي، Zone = نطاق سعري، Point = نقطة دقيقة مثل entry أو stop.</div>
+              <div class="annotation-shell" style="margin-top:12px">
+                <svg id="annotationChart" viewBox="0 0 920 480" preserveAspectRatio="none"></svg>
+              </div>
+              <div class="legend" id="annotationLegend">
+                <span class="source">Level / zone / point</span>
+                <span class="retest">Annotations saved to JSON</span>
+              </div>
+              <label for="exampleJson" style="margin-top:12px">Annotations JSON</label>
+              <textarea id="exampleJson" style="min-height:180px">[
+  {"type":"snr","label":"fresh resistance","timeframe":"30m","price_start":2350.2},
+  {"type":"reaction","label":"rejection on level","timeframe":"3m","price_start":2350.1},
+  {"type":"fvg","label":"bearish fvg","timeframe":"3m","price_start":2349.9,"price_end":2349.4},
+  {"type":"poi","label":"entry area","timeframe":"3m","price_start":2349.65}
+]</textarea>
+              <div class="row" style="margin-top:12px">
+                <button class="btn btn-ghost" type="button" onclick="saveTemplateExample()">🏷️ حفظ المثال الحالي</button>
+                <button class="btn btn-ghost" type="button" onclick="runSelectedTemplate()">🚀 شغّل الـ Template المحدد</button>
+              </div>
+            </div>
+
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Template Inspector</h4>
+                  <p>يعرض التفاصيل الكاملة للـ Template المختار مع أمثلته وقواعده.</p>
+                </div>
+                <span class="badge">Inspector</span>
+              </div>
+              <pre id="templateInspector">احفظ أو اختر Template لعرض تفاصيله هنا.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="runsWorkspace" class="workspace">
+        <div class="vault-grid">
+          <div class="workspace-panel">
+            <div class="list-head">
+              <div>
+                <h4 style="margin:0">Run Explorer</h4>
+                <p class="muted micro" style="margin:6px 0 0">ابحث في السجل، حمّل تشغيلًا سابقًا، وراقب جودة الأداء عبر الزمن.</p>
+              </div>
+              <span class="badge">Research history</span>
+            </div>
+            <div class="search-inline">
+              <input id="runSearch" type="search" placeholder="ابحث في الـ runs…" />
+            </div>
+            <div class="surface" style="margin-top:12px">
+              <div class="label">Run quality trend</div>
+              <svg id="runTrendChart" viewBox="0 0 860 240" preserveAspectRatio="none"></svg>
+              <div class="micro muted" id="runTrendMeta" style="margin-top:10px">سيظهر هنا اتجاه جودة التشغيلات وعدد الـ setups.</div>
+            </div>
+            <div id="historyRuns" class="list-scroll" style="margin-top:12px"></div>
+          </div>
+
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>Run details</h4>
+                  <p>ملخص تشغيل محدد مع إحصاءات الأداء والتنبيهات.</p>
+                </div>
+                <span class="badge">Inspector</span>
+              </div>
+              <pre id="runInspector">اختر تشغيلًا من القائمة لعرض التفاصيل هنا.</pre>
+            </div>
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>آخر تشغيل محمّل</h4>
+                  <p>يمكنك تحميله مباشرة إلى مركز النتائج والشارت.</p>
+                </div>
+                <span class="badge">Current run</span>
+              </div>
+              <pre id="currentRunSummary">لم يتم تحميل أي run بعد.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="patternTeacherWorkspace" class="workspace">
+        <div class="vault-grid">
+          <div class="workspace-panel">
+            <div class="list-head">
+              <div>
+                <h4 style="margin:0">Pattern Teacher</h4>
+                <p class="muted micro" style="margin:6px 0 0">علّم البوت أي نمط (QM، أو أي شي) — أشّر على الشارت وهو يتعلّم ويدوّر.</p>
+              </div>
+              <span class="badge">علّم → ابحث</span>
+            </div>
+
+            <div class="workspace-panel" style="margin-top:14px; background:var(--surface-alt, #1a1e2b); border-radius:10px; padding:18px">
+              <h4 style="margin:0 0 8px">1. علّم النمط</h4>
+              <p class="muted micro">اختر الفريم، ارسم swing points على الشارت (قمم وقيعان)، حدد وين الزون، واكتب الشرح.</p>
+
+              <div class="subgrid" style="margin-top:14px">
+                <div>
+                  <label for="ptName">اسم النمط</label>
+                  <input id="ptName" type="text" placeholder="مثلاً: QM Bullish" />
+                </div>
+                <div>
+                  <label for="ptDirection">الاتجاه</label>
+                  <select id="ptDirection">
+                    <option value="bullish">صعودي (Bullish)</option>
+                    <option value="bearish">هبوطي (Bearish)</option>
+                    <option value="either">الاثنين</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="subgrid" style="margin-top:12px">
+                <div>
+                  <label for="ptHTF">فريم الكشف (HTF)</label>
+                  <select id="ptHTF">
+                    <option value="4h">4H</option>
+                    <option value="1h">1H</option>
+                    <option value="30m" selected>30m</option>
+                    <option value="15m">15m</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ptLTF">فريم الدخول (LTF)</label>
+                  <select id="ptLTF">
+                    <option value="15m">15m</option>
+                    <option value="5m" selected>5m</option>
+                    <option value="3m">3m</option>
+                  </select>
+                </div>
+              </div>
+
+              <label for="ptDescription" style="margin-top:14px">الشرح الكتابي (بالعربي أو إنجليزي)</label>
+              <textarea id="ptDescription" style="min-height:100px" placeholder="اشرح النمط هون... مثلاً: QM يعني السعر يعمل left shoulder ثم head أعمق ثم right shoulder والدخول عند كسر neckline والزون عند آخر قاع قبل الكسر"></textarea>
+
+              <div style="margin-top:14px">
+                <label>Swing Points (أشّر على الشارت أو أضف يدوياً)</label>
+                <div class="annotation-toolbar" style="margin-top:8px">
+                  <button class="tool-btn active" type="button" onclick="ptSetDrawMode('high')">قمة (H)</button>
+                  <button class="tool-btn" type="button" onclick="ptSetDrawMode('low')">قاع (L)</button>
+                  <button class="tool-btn" type="button" onclick="ptSetDrawMode('zone')">الزون</button>
+                  <button class="tool-btn" type="button" onclick="ptLoadChart()">حمّل الشارت</button>
+                  <button class="tool-btn" type="button" onclick="ptUndo()">تراجع</button>
+                  <button class="tool-btn danger" type="button" onclick="ptClearPoints()">مسح الكل</button>
+                </div>
+              </div>
+
+              <div class="annotation-shell" style="margin-top:12px">
+                <svg id="ptChart" viewBox="0 0 920 400" preserveAspectRatio="none"></svg>
+              </div>
+              <div id="ptChartHint" class="micro muted" style="margin-top:8px">حمّل الشارت ثم اضغط على القمم والقيعان بالترتيب اللي بتحددهم. الزون = المنطقة يلي بتتوقع الدخول منها.</div>
+
+              <label style="margin-top:14px">النقاط المحددة:</label>
+              <div id="ptPointsList" class="pill-list" style="min-height:40px"></div>
+
+              <div class="row" style="margin-top:16px">
+                <button class="btn btn-primary" type="button" onclick="ptTeachPattern()">🎓 علّم النمط</button>
+                <button class="btn btn-ghost" type="button" onclick="ptAddExample()">➕ أضف مثال إضافي</button>
+              </div>
+            </div>
+
+            <div class="workspace-panel" style="margin-top:14px; background:var(--surface-alt, #1a1e2b); border-radius:10px; padding:18px">
+              <h4 style="margin:0 0 8px">2. ابحث عن النمط</h4>
+              <p class="muted micro">اختر نمط محفوظ وشغّل البحث — البوت يدوّر على كل الحالات المشابهة.</p>
+
+              <div class="subgrid" style="margin-top:12px">
+                <div>
+                  <label for="ptSearchPattern">النمط</label>
+                  <select id="ptSearchPattern"><option value="">-- اختر نمط --</option></select>
+                </div>
+                <div>
+                  <label for="ptSearchMax">أقصى عدد نتائج</label>
+                  <input id="ptSearchMax" type="number" value="50" min="5" max="200" />
+                </div>
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn btn-secondary" type="button" onclick="ptSearchPattern()">🔍 دوّر على الشارت</button>
+                <button class="btn btn-ghost" type="button" onclick="ptSearchWithLTF()">📊 دوّر + حلل LTF</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>الأنماط المحفوظة</h4>
+                  <p>كل الأنماط اللي علّمتها للبوت.</p>
+                </div>
+                <span class="badge">Learned patterns</span>
+              </div>
+              <div id="ptSavedList" class="list-scroll" style="max-height:300px">
+                <div class="micro muted">لسا ما علّمت البوت أي نمط. ابدأ بتعليمه من القسم الأول.</div>
+              </div>
+            </div>
+
+            <div class="workspace-panel">
+              <div class="section-title">
+                <div>
+                  <h4>نتائج البحث</h4>
+                  <p>الحالات اللي لقاها البوت مطابقة للنمط.</p>
+                </div>
+                <span class="badge">Matches</span>
+              </div>
+              <pre id="ptResults">علّم النمط أولاً ثم اضغط "دوّر".</pre>
+              <div id="ptMatchCards" class="trade-card-grid" style="margin-top:12px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="diagnosticsWorkspace" class="workspace">
+        <div class="diagnostics-grid">
+          <div class="workspace-panel">
+            <div class="section-title">
+              <div>
+                <h4>System diagnostics</h4>
+                <p>فحص health وready وversion من نفس الواجهة.</p>
+              </div>
+              <span class="badge">Health</span>
+            </div>
+            <div class="hero-grid">
+              <div class="metric"><div class="label">Health</div><div id="diagHealth" class="value">—</div><div class="sub">حالة السيرفر.</div></div>
+              <div class="metric"><div class="label">Ready</div><div id="diagReady" class="value">—</div><div class="sub">إمكانية الكتابة إلى مجلد البيانات.</div></div>
+              <div class="metric"><div class="label">Version</div><div id="diagVersion" class="value">{{ app_version }}</div><div class="sub">الإصدار الحالي.</div></div>
+              <div class="metric"><div class="label">Environment</div><div id="envBox" class="value">—</div><div class="sub">local / docker / production.</div></div>
+            </div>
+          </div>
+          <div class="workspace-panel">
+            <div class="section-title">
+              <div>
+                <h4>ملاحظات تشغيل</h4>
+                <p>توضيح سريع لحالة الاعتماديات والنطاق والتشغيل.</p>
+              </div>
+              <span class="badge">Notes</span>
+            </div>
+            <div class="pill-list" id="opsNotes">
+              <div class="pill">لا يتم استخدام أي demo data داخل المشروع.</div>
+              <div class="pill">إذا غابت بيانات السوق الحقيقية، يرجع خطأ واضح بدل نتائج وهمية.</div>
+              <div class="pill">يمكن للـ API العمل حتى عندما يكون Telegram bot غير مفعّل.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="resultsSection" class="panel">
+      <div class="section-title">
+        <div>
+          <h3>مركز النتائج</h3>
+          <p>ملخص تنفيذي، أفضل الربطات، تفاصيل الـ setups، والشارت في منطقة واحدة مرتبة.</p>
+        </div>
+        <span class="badge">Results hub</span>
+      </div>
+
+      <div class="results-grid">
+        <div class="result-kpi"><div class="label">Qualified setups</div><div id="statQualified" class="value">-</div><div class="micro muted">عدد الفرص المطابقة</div></div>
+        <div class="result-kpi"><div class="label">Candidates</div><div id="statCandidates" class="value">-</div><div class="micro muted">المرشحون المفحوصون</div></div>
+        <div class="result-kpi"><div class="label">Avg quality</div><div id="statQuality" class="value">-</div><div class="micro muted">متوسط الجودة</div></div>
+        <div class="result-kpi"><div class="label">Top move</div><div id="statMove" class="value">-</div><div class="micro muted">أفضل حركة بالنقاط</div></div>
+      </div>
+
+      <div class="vault-grid" style="margin-top:18px">
+        <div class="workspace-panel">
+          <div class="section-title">
+            <div>
+              <h4>Performance intelligence</h4>
+              <p>منحنى الأداء، توزيع الجودة، وتوزيع الجلسات من نفس ناتج التشغيل الحالي.</p>
+            </div>
+            <span class="badge">Visual analytics</span>
+          </div>
+          <div class="subgrid">
+            <div class="surface">
+              <div class="label">Equity curve</div>
+              <svg id="equityChart" viewBox="0 0 860 240" preserveAspectRatio="none"></svg>
+              <div id="equityMeta" class="micro muted" style="margin-top:10px">شغّل بحثًا لعرض منحنى الأداء التراكمي.</div>
+            </div>
+            <div class="surface">
+              <div class="label">Quality histogram</div>
+              <svg id="qualityHistogram" viewBox="0 0 860 240" preserveAspectRatio="none"></svg>
+              <div id="qualityMeta" class="micro muted" style="margin-top:10px">سيظهر توزيع الجودة هنا.</div>
+            </div>
+          </div>
+          <div class="surface" style="margin-top:14px">
+            <div class="label">Session distribution</div>
+            <svg id="sessionChart" viewBox="0 0 860 240" preserveAspectRatio="none"></svg>
+            <div id="sessionMeta" class="micro muted" style="margin-top:10px">ستظهر الجلسات الأكثر نشاطًا بمجرد توفر setups.</div>
+          </div>
+        </div>
+        <div class="workspace-panel">
+          <div class="section-title">
+            <div>
+              <h4>Backtest scorecard</h4>
+              <p>قراءة مركّزة لأهم أرقام الـ backtest الحالية والتنبيهات المصاحبة.</p>
+            </div>
+            <span class="badge">Risk / return</span>
+          </div>
+          <div class="hero-grid">
+            <div class="metric"><div class="label">Trades</div><div id="metricTrades" class="value">-</div><div class="sub">عدد الصفقات أو setups المحتسبة.</div></div>
+            <div class="metric"><div class="label">Win rate</div><div id="metricWinRate" class="value">-</div><div class="sub">نسبة النجاحات من النتيجة الحالية.</div></div>
+            <div class="metric"><div class="label">Average R</div><div id="metricAverageR" class="value">-</div><div class="sub">متوسط العائد لكل فرصة.</div></div>
+            <div class="metric"><div class="label">Profit factor</div><div id="metricProfitFactor" class="value">-</div><div class="sub">مقارنة المكاسب بالخسائر.</div></div>
+          </div>
+          <div class="surface" style="margin-top:14px">
+            <div class="label">Warnings & diagnostics</div>
+            <div id="warningsList" class="pill-list" style="margin-top:12px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="research-grid" style="margin-top:18px">
+        <div class="stack">
+          <div class="workspace-panel">
+            <div class="section-title">
+              <div>
+                <h4>الملخص التنفيذي</h4>
+                <p>ملخص بشري + أبرز النقاط + أفضل ربط فريمات.</p>
+              </div>
+              <span class="badge">Summary</span>
+            </div>
+            <pre id="humanSummary">شغّل البحث أولًا.</pre>
+            <div style="margin-top:14px">
+              <label>أبرز النقاط</label>
+              <div id="highlights" class="pill-list"></div>
+            </div>
+            <div style="margin-top:14px">
+              <label>أفضل ربط فريمات</label>
+              <div id="optimizerBox" class="list-scroll" style="max-height:280px"></div>
+            </div>
+          </div>
+          <div class="workspace-panel">
+            <div class="section-title">
+              <div>
+                <h4>تفاصيل الفرص</h4>
+                <p>اختر أي setup ليتم رسمه مباشرة على الشارت.</p>
+              </div>
+              <span class="badge">Setups</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>الوقت</th><th>النوع</th><th>الجودة</th><th>النتيجة</th><th>الحركة</th><th>الجلسة</th></tr></thead>
+                <tbody id="setupTable"></tbody>
+              </table>
+            </div>
+            <div style="margin-top:14px">
+              <label>بطاقات الفرص</label>
+              <div id="setupCards" class="trade-card-grid"></div>
+            </div>
+            <div class="subgrid" style="margin-top:14px">
+              <div>
+                <label>شرح الفرصة المختارة</label>
+                <pre id="setupDetails">اختر أي صف لعرض التفسير والرسم.</pre>
+              </div>
+              <div>
+                <label>خطة الصفقة</label>
+                <div id="tradePlanBox" class="trade-plan-box">اختر فرصة لعرض الدخول ووقف الخسارة والهدف بشكل بشري وواضح.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="workspace-panel">
+            <div class="section-title">
+              <div>
+                <h4>الشارت التفاعلي</h4>
+                <p>عرض الشموع مع source candle وretest levels.</p>
+              </div>
+              <span class="badge">Chart context</span>
+            </div>
+            <div class="chart-shell">
+              <svg id="svgChart" viewBox="0 0 920 480" preserveAspectRatio="none"></svg>
+            </div>
+            <div class="legend">
+              <span class="wick">Stop / invalidation</span>
+              <span class="body">Entry / POI</span>
+              <span class="source">Source candle</span>
+              <span class="retest">Retest / scanned setups</span>
+            </div>
+            <div id="chartLegend" class="micro muted" style="margin-top:10px">لا توجد توصية محددة بعد.</div>
+          </div>
+          <div class="workspace-panel">
+            <div class="section-title">
+              <div>
+                <h4>Run snapshot</h4>
+                <p>تفاصيل آخر تشغيل جرى عرضه في المركز.</p>
+              </div>
+              <span class="badge">Snapshot</span>
+            </div>
+            <pre id="snapshotBox">-</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="systemSection" class="panel">
+      <div class="footer-note">
+        هذا المشروع مخصص للبحث والتعليم وتحليل الاستراتيجيات، وليس نصيحة مالية أو نظام تنفيذ تداول حي.
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toastWrap" class="toast-wrap"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
